@@ -4,7 +4,7 @@ set -e
 BRANCHES=("qcom-msm8974-6.12.y")
 ARCH="arm"
 CROSS_COMPILE="arm-linux-gnueabihf-"
-PKG_VERSION="1.0-1"
+PKG_VERSION="1.0-2"
 CONFIG_LOCALVERSION="-citronics-lemon"
 
 ROOT_DIR=$(pwd)
