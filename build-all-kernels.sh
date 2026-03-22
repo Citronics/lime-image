@@ -1,7 +1,6 @@
 #!/bin/bash
 set -e
 
-BRANCHES=("qcom-msm8974-6.12.y")
 ARCH="arm"
 CROSS_COMPILE="arm-linux-gnueabihf-"
 CONFIG_LOCALVERSION="-citronics-lime"
@@ -14,67 +13,102 @@ TAG=$(git describe --tags --exact-match 2>/dev/null) || {
 }
 PKG_VERSION=${TAG#v}
 
-KERNEL_SRC_DIR="${ROOT_DIR}/linux"
-
-cd "$KERNEL_SRC_DIR"
-git fetch --all
-cd - > /dev/null
-
 CONFIGS_DIR="$ROOT_DIR/configs"
+SOURCES_DIR="$ROOT_DIR/sources"
 OUTPUT_BASE="$ROOT_DIR/output"
 BUILD_BASE="$ROOT_DIR/build"
+KERNELS_CONF="$ROOT_DIR/kernels.conf"
 
-for BRANCH in "${BRANCHES[@]}"; do
-    VERSION="${BRANCH#qcom-msm8974-}"
-    KERNEL_NAME="msm8974-${VERSION}"
-    CONFIG_FILE="${CONFIGS_DIR}/${KERNEL_NAME}.config"
-    OUTPUT_DIR="${OUTPUT_BASE}/${VERSION}"
-    BUILD_DIR="${BUILD_BASE}/${VERSION}"
+if [ ! -f "$KERNELS_CONF" ]; then
+  echo "ERROR: kernels.conf not found" >&2
+  exit 1
+fi
 
-    echo "🔁 Building branch: $BRANCH"
-    echo "⚙️  Using config: $CONFIG_FILE"
+# Allow building a single kernel: ./build-all-kernels.sh msm8x74-6.15.y
+FILTER="${1:-}"
 
-    # Remove worktree from Git if it exists
-    cd "$KERNEL_SRC_DIR"
-    if git worktree list | grep -q "$BUILD_DIR"; then
-        git worktree remove --force "$BUILD_DIR"
-    fi
+mkdir -p "$SOURCES_DIR"
 
-    # Ensure folder is gone
-    rm -rf "$BUILD_DIR"
-    git worktree prune
+while IFS= read -r line; do
+  # Skip comments and empty lines
+  [[ "$line" =~ ^[[:space:]]*# ]] && continue
+  [[ -z "${line// /}" ]] && continue
 
-    # Add clean worktree
-    git fetch origin "$BRANCH"
-    git worktree add "$BUILD_DIR" "origin/$BRANCH"
+  NAME=$(echo "$line" | awk '{print $1}')
+  REPO_URL=$(echo "$line" | awk '{print $2}')
+  BRANCH=$(echo "$line" | awk '{print $3}')
 
-    cd "$BUILD_DIR"
+  # If filter is set, skip non-matching kernels
+  if [ -n "$FILTER" ] && [ "$NAME" != "$FILTER" ]; then
+    continue
+  fi
 
-    # Setup build environment
-    export ARCH="$ARCH"
-    export CROSS_COMPILE="$CROSS_COMPILE"
-    export DEBEMAIL="info@citronics.eu"
-    export DEBFULLNAME="Citronics"
+  CONFIG_FILE="${CONFIGS_DIR}/${NAME}.config"
+  SOURCE_DIR="${SOURCES_DIR}/${NAME}"
+  OUTPUT_DIR="${OUTPUT_BASE}/${NAME}"
+  BUILD_DIR="${BUILD_BASE}/${NAME}"
 
-    # Copy config and build
-    cp "$CONFIG_FILE" .config
-    make olddefconfig
+  if [ ! -f "$CONFIG_FILE" ]; then
+    echo "ERROR: Config file not found: $CONFIG_FILE" >&2
+    exit 1
+  fi
 
-    echo "🚧 Building kernel .deb packages for $KERNEL_NAME"
-    make -j$(nproc) \
-         LOCALVERSION=$CONFIG_LOCALVERSION \
-         KDEB_PKGVERSION=$PKG_VERSION \
-         deb-pkg
+  echo "🔁 Building kernel: $NAME"
+  echo "   Repo:   $REPO_URL (branch: $BRANCH)"
+  echo "   Config: $CONFIG_FILE"
 
-    # Move packages to output
-    mkdir -p "$OUTPUT_DIR"
-    cd "$BUILD_DIR/.."
-    mv ./*.deb "$OUTPUT_DIR"
+  # Clone or fetch the kernel source
+  if [ -d "$SOURCE_DIR/.git" ]; then
+    echo "   Fetching updates..."
+    git -C "$SOURCE_DIR" fetch origin "$BRANCH"
+  else
+    echo "   Cloning..."
+    rm -rf "$SOURCE_DIR"
+    git clone --single-branch --branch "$BRANCH" "$REPO_URL" "$SOURCE_DIR"
+  fi
 
-    rm -f "$OUTPUT_DIR"/*-dbg_*.deb "$OUTPUT_DIR"/linux-libc-dev_*.deb
+  # Clean up any previous build dir
+  rm -rf "$BUILD_DIR"
+  mkdir -p "$BUILD_DIR"
 
-    echo "✅ Done: $OUTPUT_DIR"
-    cd - > /dev/null
-done
+  # Copy source to build dir (avoid polluting the cached clone)
+  git -C "$SOURCE_DIR" checkout "origin/$BRANCH" -- .
+  cp -a "$SOURCE_DIR/." "$BUILD_DIR/"
 
+  cd "$BUILD_DIR"
+
+  # Setup build environment
+  export ARCH="$ARCH"
+  export CROSS_COMPILE="$CROSS_COMPILE"
+  export DEBEMAIL="info@citronics.eu"
+  export DEBFULLNAME="Citronics"
+
+  # Copy config and build
+  cp "$CONFIG_FILE" .config
+  make olddefconfig
+
+  echo "🚧 Building kernel .deb packages for $NAME"
+  make -j$(nproc) \
+       LOCALVERSION=$CONFIG_LOCALVERSION \
+       KDEB_PKGVERSION=$PKG_VERSION \
+       deb-pkg
+
+  # Move packages to output
+  mkdir -p "$OUTPUT_DIR"
+  cd "$BUILD_DIR/.."
+  mv ./*.deb "$OUTPUT_DIR/" 2>/dev/null || true
+
+  # Also check build dir parent for debs (different kernel versions place them differently)
+  cd "$BUILD_DIR"
+  mv ../*.deb "$OUTPUT_DIR/" 2>/dev/null || true
+
+  rm -f "$OUTPUT_DIR"/*-dbg_*.deb "$OUTPUT_DIR"/linux-libc-dev_*.deb
+
+  echo "✅ Done: $OUTPUT_DIR"
+  cd "$ROOT_DIR"
+done < "$KERNELS_CONF"
+
+echo ""
 echo "🎉 All builds completed successfully."
+echo "Output:"
+ls -la "$OUTPUT_BASE"/*/
