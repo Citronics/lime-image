@@ -4,10 +4,15 @@ set -e
 BRANCHES=("qcom-msm8974-6.12.y")
 ARCH="arm"
 CROSS_COMPILE="arm-linux-gnueabihf-"
-PKG_VERSION="1.0-2"
 CONFIG_LOCALVERSION="-citronics-lime"
 
 ROOT_DIR=$(pwd)
+
+TAG=$(git describe --tags --exact-match 2>/dev/null) || {
+  echo "ERROR: No git tag found on current commit. Create a tag first: git tag v1.1" >&2
+  exit 1
+}
+PKG_VERSION=${TAG#v}
 
 KERNEL_SRC_DIR="${ROOT_DIR}/linux"
 
