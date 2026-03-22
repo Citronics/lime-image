@@ -7,11 +7,14 @@ CONFIG_LOCALVERSION="-citronics-lime"
 
 ROOT_DIR=$(pwd)
 
-TAG=$(git describe --tags --exact-match 2>/dev/null) || {
-  echo "ERROR: No git tag found on current commit. Create a tag first: git tag v1.1" >&2
-  exit 1
-}
-PKG_VERSION=${TAG#v}
+TAG=$(git describe --tags --exact-match 2>/dev/null) || TAG=""
+if [ -n "$TAG" ]; then
+  PKG_VERSION=${TAG#v}
+else
+  PKG_VERSION=$(git describe --tags --always 2>/dev/null || echo "0.0")
+  echo "WARNING: No exact git tag on current commit. Using version: $PKG_VERSION" >&2
+  echo "         For releases, tag first: git tag v2.0" >&2
+fi
 
 CONFIGS_DIR="$ROOT_DIR/configs"
 SOURCES_DIR="$ROOT_DIR/sources"
