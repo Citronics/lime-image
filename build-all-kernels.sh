@@ -12,6 +12,7 @@ if [ -n "$TAG" ]; then
   PKG_VERSION=${TAG#v}
 else
   PKG_VERSION=$(git describe --tags --always 2>/dev/null || echo "0.0")
+  PKG_VERSION=${PKG_VERSION#v}
   echo "WARNING: No exact git tag on current commit. Using version: $PKG_VERSION" >&2
   echo "         For releases, tag first: git tag v2.0" >&2
 fi
@@ -32,6 +33,32 @@ FILTER="${1:-}"
 
 mkdir -p "$SOURCES_DIR"
 
+# Collect available kernel names for validation
+AVAILABLE_KERNELS=()
+while IFS= read -r line; do
+  [[ "$line" =~ ^[[:space:]]*# ]] && continue
+  [[ -z "${line// /}" ]] && continue
+  AVAILABLE_KERNELS+=("$(echo "$line" | awk '{print $1}')")
+done < "$KERNELS_CONF"
+
+# Validate filter against available kernels
+if [ -n "$FILTER" ]; then
+  FOUND=0
+  for k in "${AVAILABLE_KERNELS[@]}"; do
+    [ "$k" = "$FILTER" ] && FOUND=1 && break
+  done
+  if [ "$FOUND" -eq 0 ]; then
+    echo "ERROR: Unknown kernel '$FILTER'" >&2
+    echo "Available kernels:" >&2
+    for k in "${AVAILABLE_KERNELS[@]}"; do
+      echo "  - $k" >&2
+    done
+    exit 1
+  fi
+fi
+
+BUILD_COUNT=0
+
 while IFS= read -r line; do
   # Skip comments and empty lines
   [[ "$line" =~ ^[[:space:]]*# ]] && continue
@@ -50,6 +77,8 @@ while IFS= read -r line; do
   SOURCE_DIR="${SOURCES_DIR}/${NAME}"
   OUTPUT_DIR="${OUTPUT_BASE}/${NAME}"
   BUILD_DIR="${BUILD_BASE}/${NAME}"
+
+  rm -rf "$OUTPUT_DIR"
 
   if [ ! -f "$CONFIG_FILE" ]; then
     echo "ERROR: Config file not found: $CONFIG_FILE" >&2
@@ -107,11 +136,17 @@ while IFS= read -r line; do
 
   rm -f "$OUTPUT_DIR"/*-dbg_*.deb "$OUTPUT_DIR"/linux-libc-dev_*.deb
 
+  BUILD_COUNT=$((BUILD_COUNT + 1))
   echo "✅ Done: $OUTPUT_DIR"
   cd "$ROOT_DIR"
 done < "$KERNELS_CONF"
 
+if [ "$BUILD_COUNT" -eq 0 ]; then
+  echo "ERROR: No kernels were built." >&2
+  exit 1
+fi
+
 echo ""
-echo "🎉 All builds completed successfully."
+echo "🎉 $BUILD_COUNT kernel(s) built successfully."
 echo "Output:"
-ls -la "$OUTPUT_BASE"/*/
+ls -la "$OUTPUT_BASE"/*/ 

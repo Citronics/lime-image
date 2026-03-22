@@ -5,14 +5,17 @@ Builds `.deb` packages for multiple kernel sources to be used on the Citronics L
 ## Prerequisites
 
 ```
-sudo apt-get install build-essential libncurses-dev bison flex libssl-dev bc fakeroot git libelf-dev
+sudo apt-get install build-essential libncurses-dev bison flex libssl-dev bc fakeroot git libelf-dev debhelper kmod libdw-dev
 ```
 
 For cross-compilation from x86/amd64:
 
 ```
-sudo apt-get install gcc-arm-linux-gnueabihf
+sudo dpkg --add-architecture armhf
+sudo apt-get install gcc-arm-linux-gnueabihf libssl-dev:armhf
 ```
+
+On Ubuntu, `archive.ubuntu.com` doesn't carry armhf packages. You need to add `ports.ubuntu.com` as a source for armhf and restrict the main sources to amd64. See [Ubuntu MultiArch](https://wiki.ubuntu.com/MultiarchSpec) for details.
 
 ## Kernel Sources
 
