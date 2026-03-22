@@ -1,6 +1,6 @@
-# Citronics Lemon kernel images
+# Citronics Lime kernel images
 
-This repository builds the .deb packages for relevant kernel versions to be used on the Lemon board by Citronics.
+This repository builds the .deb packages for relevant kernel versions to be used on the Lime board by Citronics.
 
 ## Prerequisites
 

@@ -5,7 +5,7 @@ BRANCHES=("qcom-msm8974-6.12.y")
 ARCH="arm"
 CROSS_COMPILE="arm-linux-gnueabihf-"
 PKG_VERSION="1.0-2"
-CONFIG_LOCALVERSION="-citronics-lemon"
+CONFIG_LOCALVERSION="-citronics-lime"
 
 ROOT_DIR=$(pwd)
 
@@ -48,6 +48,8 @@ for BRANCH in "${BRANCHES[@]}"; do
     # Setup build environment
     export ARCH="$ARCH"
     export CROSS_COMPILE="$CROSS_COMPILE"
+    export DEBEMAIL="info@citronics.eu"
+    export DEBFULLNAME="Citronics"
 
     # Copy config and build
     cp "$CONFIG_FILE" .config
@@ -63,6 +65,8 @@ for BRANCH in "${BRANCHES[@]}"; do
     mkdir -p "$OUTPUT_DIR"
     cd "$BUILD_DIR/.."
     mv ./*.deb "$OUTPUT_DIR"
+
+    rm -f "$OUTPUT_DIR"/*-dbg_*.deb "$OUTPUT_DIR"/linux-libc-dev_*.deb
 
     echo "✅ Done: $OUTPUT_DIR"
     cd - > /dev/null
